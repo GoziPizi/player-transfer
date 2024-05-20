@@ -1,4 +1,5 @@
-pragma solidity ^0.8.25;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
 
 contract PlayerTransferContract {
     address public owner;
@@ -9,166 +10,127 @@ contract PlayerTransferContract {
     uint8 public decimals;
     uint256 public totalSupply;
 
-    mapping(address => uint256) public balanceOfClub;
-    mapping(uint => address) public playerIndexToClubAddress;
-    mapping(uint => string) public playerIndexToName;
-
-    struct Offer {
-        bool isForSale;
-        uint playerIndex;
-        address seller;
-        uint minValue;
-        address? onlySellTo;
-    }
-
-    struct Bid {
-        bool hasBid;
-        uint playerIndex;
-        address bidder;
-        uint value;
-    }
-
-    mapping(uint => Offer) public Offer;
-
-    mapping(uint => Bid) public Bid;
-
-    event PlayerRegistered(
-        address clubAdress,
-        uint playerIndex,
-        string playerName
-    );
-    event PlayerTransfer(
-        address indexed from,
-        address indexed to,
-        uint playerIndex
-    );
-    event PlayerBidEntered(
-        address clubAdress,
-        uint playerIndex,
-        uint bidAmount
-    );
-    event PlayerBidWithdrawn(address clubAdress, uint playerIndex);
-    event PlayerBidAccepted(address clubAdress, uint playerIndex);
-    event PlayerBidRejected(address clubAdress, uint playerIndex);
-
-    function PlayerTransferContract() {
+    constructor() {
         owner = msg.sender;
-        standard = "Player Transfer Contract";
-        name = "PLAYERTRANSFERATOR";
-        symbol = "PTC";
-        decimals = 0;
+        standard = "Token 0.1";
+        name = "Player Transfer Token";
+        symbol = "PTT";
     }
 
-    function registerPlayer(
-        address clubAdress,
-        uint playerIndex,
-        string playerName
-    ) {
-        //ensures only the owner can register a player
-        if (msg.sender != owner) {
-            throw;
-        }
-        playerIndexToClubAddress[playerIndex] = clubAdress;
-        playerIndexToName[playerIndex] = playerName;
-        PlayerRegistered(clubAdress, playerIndex, playerName);
-    }
+    mapping(address => uint256) public balanceOf;
 
-    function transferPlayer(address to, uint playerIndex) {
-        if (playerIndexToClubAddress[playerIndex] != msg.sender) {
-            throw;
-        }
-        playerIndexToClubAddress[playerIndex] = to;
-        PlayerTransfer(msg.sender, to, playerIndex);
-    }
-
-    function offerPlayerToSell(uint playerIndex, uint minSalePriceInWei) {
-        Offer[playerIndex] = Offer(true, playerIndex, msg.sender, minSalePriceInWei, 0x0);
-        PlayerBidEntered(msg.sender, playerIndex, minSalePriceInWei);
-    }
-
-    function offerPlayerToSellToAddress(
-        uint playerIndex,
-        uint minSalePriceInWei,
-        address toAddress
-    ) {
-        Offer[playerIndex] = Offer(true, playerIndex, msg.sender, minSalePriceInWei, toAddress);
-        PlayerBidEntered(msg.sender, playerIndex, minSalePriceInWei);
-    }
-
-    function buyPlayer(uint playerIndex) payable {
-        Offer offer = Offer[playerIndex];
-        if (offer.isForSale) {
-            if (offer.onlySellTo != 0x0 && offer.onlySellTo != msg.sender) {
-                throw;
-            }
-            if (msg.value < offer.minValue) {
-                throw;
-            }
-            address seller = offer.seller;
-
-            playerIndexToClubAddress[playerIndex] = msg.sender;
-            PlayerTransfer(seller, msg.sender, playerIndex);
-
-            offer.isForSale = false;
-            if (!seller.send(msg.value)) {
-                throw;
-            }
+    function withdraw() public {
+        /**
+            * Withdraw the balance of the contract
+            * Conditions for a withdrawal:
+            The contract must have a balance
+            The contract must be called by the owner
+        */
+        uint256 amount = balanceOf[msg.sender];
+        balanceOf[msg.sender] = 0;
+        if (!payable(msg.sender).send(amount)) {
+            balanceOf[msg.sender] = amount;
         }
     }
 
-    function withdraw() {
-        uint amount = balanceOfClub[msg.sender];
-        balanceOfClub[msg.sender] = 0;
-        if (!msg.sender.send(amount)) {
-            balanceOfClub[msg.sender] = amount;
-        }
+    struct Contract {
+        address clubAdress;
+        address playerAdress;
+        uint256 transferFee;
+        uint256 salary;
+        uint256 contractStartDate;
+        uint256 contractEndDate;
     }
 
-    function enterBidForPlayer(uint playerIndex) payable {
-        Offer offer = Offer[playerIndex];
-        if (!offer.isForSale) {
-            throw;
-        }
-        if (msg.value >= offer.minValue) {
-            throw;
-        }
-        if (Bid[playerIndex].hasBid) {
-            throw;
-        }
-        Bid[playerIndex] = Bid(true, playerIndex, msg.sender, msg.value);
-        PlayerBidEntered(msg.sender, playerIndex, msg.value);
+    struct ClubOfferForFreePlayer {
+        address clubAddress;
+        address playerAddress;
+        uint256 salary;
+        uint256 contractEndDate;
     }
 
-    function acceptBidForPlayer(uint playerIndex, uint minPrice) {
-        Offer offer = Offer[playerIndex];
-        if (offer.seller != msg.sender) {
-            throw;
-        }
-        Bid bid = Bid[playerIndex];
-        if (!bid.hasBid) {
-            throw;
-        }
-        if (bid.value < minPrice) {
-            throw;
-        }
-        playerIndexToClubAddress[playerIndex] = bid.bidder;
-        PlayerTransfer(msg.sender, bid.bidder, playerIndex);
-        balanceOfClub[msg.sender] += bid.value;
-        offer.isForSale = false;
-        Bid[playerIndex] = Bid(false, playerIndex, 0x0, 0);
-        PlayerBidAccepted(msg.sender, playerIndex);
+    struct PlayerExchange {
+        address oldClubAddress;
+        address newClubAddress;
+        address playerAddress;
+        uint256 transferFee;
+        uint256 salary;
+        uint256 contractEndDate;
+        bool oldClubSigned;
     }
 
-    function withdrawBidForPlayer(uint playerIndex) {
-        Bid bid = Bid[playerIndex];
-        if (bid.bidder != msg.sender) {
-            throw;
-        }
-        uint amount = bid.value;
-        Bid[playerIndex] = Bid(false, playerIndex, 0x0, 0);
-        if (!msg.sender.send(amount)) {
-            Bid[playerIndex] = Bid(true, playerIndex, msg.sender, amount);
-        }
-        PlayerBidWithdrawn(msg.sender, playerIndex);
-    }
+    //player related methods
+
+    /**
+        * Player can accept the offer from the club
+        * Conditions for accepting the offer:
+        The player must have a contract offer from this specific club
+        The method must be called by the player
+     */
+    function acceptOfferFromFreePlayer(address clubAddress) public {}
+
+    /**
+        * Player can accept the transfer from the club
+        * Conditions for accepting the offer:
+        The player must have a contract offer from this specific club
+        The method must be called by the player
+        The oldClub must have signed the contract
+     */
+    function acceptTransferFromClub(address newClubAddress) public {}
+
+    /**
+        Decline the offer from the club
+        Conditions for declining the offer:
+        The player must have a contract offer from this specific club
+     */
+    function declineOfferFromClub(address clubAddress) public {}
+
+    //club related methods
+    /**
+        * Make an offer to a free player
+        * Conditions for making an offer:
+        The player must exist
+        The player must not be under contract
+     */
+    function makeOfferToFreePlayer(
+        address playerAddress,
+        uint256 salary,
+        uint256 contractEndDate
+    ) public {}
+
+    /**
+        * Withdraw the offer to a free player
+        * Conditions for withdrawing the offer:
+        The offer must exist
+     */
+    function withdrawOfferToFreePlayer(address playerAddress) public {}
+
+    /**
+        * Make an offer to a player
+        * Conditions for making an offer:
+        The player must exist
+        The player must be under contract
+        The method must be called with the right amount of ether
+     */
+    function makeTransferOffer(
+        address playerAddress,
+        uint256 transferFee,
+        uint256 salary,
+        uint256 contractEndDate
+    ) public payable {}
+
+    /**
+        * Withdraw the offer to a player
+        * Conditions for withdrawing the offer:
+        The offer must exist
+     */
+    function withdrawTransferOffer(address playerAddress) public {}
+
+    /**
+        * Sign the contract with the player
+        * Conditions for signing the contract:
+        The offer must exist
+        The method must be called by the club which owns the player
+     */
+    function signTransferContract(address playerAddress) public {}
 }
