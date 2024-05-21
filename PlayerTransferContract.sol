@@ -107,12 +107,7 @@ contract PlayerTransferContract {
         The method must be called by the player
         The oldClub must have signed the contract
     */
-    function acceptTransferFromClub(address newClubAddress) public {
-        Contract memory actualContract = playerContract[msg.sender];
-        require(
-            actualContract.playerAdress != address(0) &&
-                actualContract.contractEndDate > block.timestamp
-        );
+    function acceptClubTransfert(address newClubAddress) public {
         ClubOfferForTakenPlayer memory offer = clubOfferForTakenPlayer[
             msg.sender
         ][newClubAddress];
