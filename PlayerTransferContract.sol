@@ -169,6 +169,7 @@ contract PlayerTransferContract {
     function makeOfferToFreePlayer(
         address playerAddress,
         uint256 salary,
+        uint256 liberationFee,
         uint256 contractEndDate
     ) public {
         Contract memory actualContract = playerContract[playerAddress];
@@ -182,7 +183,7 @@ contract PlayerTransferContract {
             msg.sender,
             playerAddress,
             salary,
-            0,
+            liberationFee,
             contractEndDate
         );
     }
