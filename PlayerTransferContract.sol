@@ -9,6 +9,7 @@ contract PlayerTransferContract {
     string public symbol;
     uint8 public decimals;
     uint256 public totalSupply;
+    uint256 public seasonBudget;
 
     constructor() {
         owner = msg.sender;
@@ -18,7 +19,15 @@ contract PlayerTransferContract {
     }
 
     mapping(address => uint256) public balanceOf;
+    mapping(address => uint256) public seasonBudgetOfClub;
 
+    mapping(address => Contract) public playerContract;
+
+    //ClubOfferForFreePlayer[clubAddress][playerAddress]
+    mapping(address => mapping(address => ClubOfferForFreePlayer))
+        public clubOfferForFreePlayer;
+    mapping(address => mapping(address => ClubOfferForTakenPlayer))
+        public clubOfferForTakenPlayer;
     function withdraw() public {
         /**
             * Withdraw the balance of the contract
@@ -36,7 +45,7 @@ contract PlayerTransferContract {
     struct Contract {
         address clubAdress;
         address playerAdress;
-        uint256 transferFee;
+        uint256 liberationFee;
         uint256 salary;
         uint256 contractStartDate;
         uint256 contractEndDate;
@@ -46,14 +55,16 @@ contract PlayerTransferContract {
         address clubAddress;
         address playerAddress;
         uint256 salary;
+        uint256 liberationFee;
         uint256 contractEndDate;
     }
 
-    struct PlayerExchange {
+    struct ClubOfferForTakenPlayer {
         address oldClubAddress;
         address newClubAddress;
         address playerAddress;
-        uint256 transferFee;
+        uint256 liberationFee;
+        uint256 newLiberationFee;
         uint256 salary;
         uint256 contractEndDate;
         bool oldClubSigned;
@@ -64,26 +75,88 @@ contract PlayerTransferContract {
     /**
         * Player can accept the offer from the club
         * Conditions for accepting the offer:
-        The player must have a contract offer from this specific club
+        The player must not have a contract, or the contract must be expired
         The method must be called by the player
-     */
-    function acceptOfferFromFreePlayer(address clubAddress) public {}
+    */
+    function acceptOfferFromFreePlayer(address clubAddress) public {
+        Contract memory actualContract = playerContract[msg.sender];
+        require(
+            actualContract.playerAdress == address(0) ||
+                actualContract.contractEndDate < block.timestamp
+        );
+        ClubOfferForFreePlayer memory offer = clubOfferForFreePlayer[
+            clubAddress
+        ][msg.sender];
+        require(offer.playerAddress == msg.sender);
+        playerContract[msg.sender] = Contract(
+            offer.clubAddress,
+            offer.playerAddress,
+            offer.liberationFee,
+            offer.salary,
+            block.timestamp,
+            offer.contractEndDate
+        );
+        clubOfferForFreePlayer[clubAddress][
+            msg.sender
+        ] = ClubOfferForFreePlayer(address(0), address(0), 0, 0, 0);
+    }
 
     /**
         * Player can accept the transfer from the club
         * Conditions for accepting the offer:
-        The player must have a contract offer from this specific club
         The method must be called by the player
         The oldClub must have signed the contract
-     */
-    function acceptTransferFromClub(address newClubAddress) public {}
+    */
+    function acceptTransferFromClub(address newClubAddress) public {
+        Contract memory actualContract = playerContract[msg.sender];
+        require(
+            actualContract.playerAdress != address(0) &&
+                actualContract.contractEndDate > block.timestamp
+        );
+        ClubOfferForTakenPlayer memory offer = clubOfferForTakenPlayer[
+            msg.sender
+        ][newClubAddress];
+        require(offer.playerAddress == msg.sender);
+        require(offer.oldClubSigned);
+        require(seasonBudgetOfClub[newClubAddress] >= offer.newLiberationFee);
+        seasonBudgetOfClub[newClubAddress] -= offer.newLiberationFee;
+        seasonBudgetOfClub[offer.oldClubAddress] += offer.liberationFee;
+        playerContract[msg.sender] = Contract(
+            offer.newClubAddress,
+            offer.playerAddress,
+            offer.newLiberationFee,
+            offer.salary,
+            block.timestamp,
+            offer.contractEndDate
+        );
+        clubOfferForTakenPlayer[msg.sender][
+            newClubAddress
+        ] = ClubOfferForTakenPlayer(
+            address(0),
+            address(0),
+            address(0),
+            0,
+            0,
+            0,
+            0,
+            false
+        );
+    }
 
     /**
         Decline the offer from the club
         Conditions for declining the offer:
         The player must have a contract offer from this specific club
-     */
-    function declineOfferFromClub(address clubAddress) public {}
+    */
+    function declineOfferFromClub(address clubAddress) public {
+        ClubOfferForFreePlayer memory offer = clubOfferForFreePlayer[
+            clubAddress
+        ][msg.sender];
+        require(offer.playerAddress == msg.sender);
+        clubOfferForFreePlayer[clubAddress][
+            msg.sender
+        ] = ClubOfferForFreePlayer(address(0), address(0), 0, 0, 0);
+    }
 
     //club related methods
     /**
@@ -91,19 +164,42 @@ contract PlayerTransferContract {
         * Conditions for making an offer:
         The player must exist
         The player must not be under contract
-     */
+    */
     function makeOfferToFreePlayer(
         address playerAddress,
         uint256 salary,
         uint256 contractEndDate
-    ) public {}
+    ) public {
+        Contract memory actualContract = playerContract[playerAddress];
+        require(
+            actualContract.playerAdress == address(0) ||
+                actualContract.contractEndDate < block.timestamp
+        );
+        clubOfferForFreePlayer[msg.sender][
+            playerAddress
+        ] = ClubOfferForFreePlayer(
+            msg.sender,
+            playerAddress,
+            salary,
+            0,
+            contractEndDate
+        );
+    }
 
     /**
         * Withdraw the offer to a free player
         * Conditions for withdrawing the offer:
         The offer must exist
      */
-    function withdrawOfferToFreePlayer(address playerAddress) public {}
+    function withdrawOfferToFreePlayer(address playerAddress) public {
+        ClubOfferForFreePlayer memory offer = clubOfferForFreePlayer[
+            msg.sender
+        ][playerAddress];
+        require(offer.playerAddress == playerAddress);
+        clubOfferForFreePlayer[msg.sender][
+            playerAddress
+        ] = ClubOfferForFreePlayer(address(0), address(0), 0, 0, 0);
+    }
 
     /**
         * Make an offer to a player
@@ -114,23 +210,73 @@ contract PlayerTransferContract {
      */
     function makeTransferOffer(
         address playerAddress,
-        uint256 transferFee,
+        uint256 newLiberationFee,
         uint256 salary,
         uint256 contractEndDate
-    ) public payable {}
+    ) public payable {
+        Contract memory actualContract = playerContract[playerAddress];
+        require(
+            actualContract.playerAdress != address(0) &&
+                actualContract.contractEndDate > block.timestamp
+        );
+        require(msg.value >= newLiberationFee);
+        clubOfferForTakenPlayer[playerAddress][
+            msg.sender
+        ] = ClubOfferForTakenPlayer(
+            actualContract.clubAdress,
+            msg.sender,
+            playerAddress,
+            actualContract.liberationFee,
+            newLiberationFee,
+            salary,
+            contractEndDate,
+            false
+        );
+    }
 
     /**
         * Withdraw the offer to a player
         * Conditions for withdrawing the offer:
         The offer must exist
      */
-    function withdrawTransferOffer(address playerAddress) public {}
+    function withdrawTransferOffer(address playerAddress) public {
+        ClubOfferForTakenPlayer memory offer = clubOfferForTakenPlayer[
+            playerAddress
+        ][msg.sender];
+        require(offer.playerAddress == playerAddress);
+        clubOfferForTakenPlayer[playerAddress][
+            msg.sender
+        ] = ClubOfferForTakenPlayer(
+            address(0),
+            address(0),
+            address(0),
+            0,
+            0,
+            0,
+            0,
+            false
+        );
+    }
 
     /**
-        * Sign the contract with the player
         * Conditions for signing the contract:
         The offer must exist
         The method must be called by the club which owns the player
      */
-    function signTransferContract(address playerAddress) public {}
+    function signTransferContract(address playerAddress) public {
+        ClubOfferForTakenPlayer memory offer = clubOfferForTakenPlayer[
+            playerAddress
+        ][msg.sender];
+        require(offer.playerAddress == playerAddress);
+        clubOfferForTakenPlayer[playerAddress][msg.sender].oldClubSigned = true;
+    }
+
+    //Called by the owner
+    function setSeasonBudgetForClub(
+        uint256 budget,
+        address clubAddress
+    ) public {
+        require(msg.sender == owner);
+        seasonBudgetOfClub[clubAddress] = budget;
+    }
 }
