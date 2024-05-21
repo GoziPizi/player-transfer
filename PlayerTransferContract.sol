@@ -266,12 +266,16 @@ contract PlayerTransferContract {
         The offer must exist
         The method must be called by the club which owns the player
      */
-    function signTransferContract(address playerAddress) public {
+    function signTransferContract(
+        address playerAddress,
+        address newClubAddress
+    ) public {
         ClubOfferForTakenPlayer memory offer = clubOfferForTakenPlayer[
             playerAddress
-        ][msg.sender];
-        require(offer.playerAddress == playerAddress);
-        clubOfferForTakenPlayer[playerAddress][msg.sender].oldClubSigned = true;
+        ][newClubAddress];
+        require(msg.sender == offer.oldClubAddress);
+        clubOfferForTakenPlayer[playerAddress][newClubAddress]
+            .oldClubSigned = true;
     }
 
     //Called by the owner
