@@ -156,6 +156,7 @@ contract PlayerTransferContract {
         clubOfferForFreePlayer[clubAddress][
             msg.sender
         ] = ClubOfferForFreePlayer(address(0), address(0), 0, 0, 0);
+        balanceOf[msg.sender] += offer.liberationFee;
     }
 
     //club related methods
@@ -219,14 +220,14 @@ contract PlayerTransferContract {
             actualContract.playerAdress != address(0) &&
                 actualContract.contractEndDate > block.timestamp
         );
-        require(msg.value >= newLiberationFee);
+        require(msg.value >= actualContract.liberationFee);
         clubOfferForTakenPlayer[playerAddress][
             msg.sender
         ] = ClubOfferForTakenPlayer(
             actualContract.clubAdress,
             msg.sender,
             playerAddress,
-            actualContract.liberationFee,
+            msg.value,
             newLiberationFee,
             salary,
             contractEndDate,
@@ -256,6 +257,7 @@ contract PlayerTransferContract {
             0,
             false
         );
+        balanceOf[msg.sender] += offer.liberationFee;
     }
 
     /**
