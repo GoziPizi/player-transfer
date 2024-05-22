@@ -116,6 +116,7 @@ contract PlayerTransferContract {
         require(seasonBudgetOfClub[newClubAddress] >= offer.newLiberationFee);
         seasonBudgetOfClub[newClubAddress] -= offer.newLiberationFee;
         seasonBudgetOfClub[offer.oldClubAddress] += offer.liberationFee;
+        balanceOf[offer.oldClubAddress] += offer.liberationFee;
         playerContract[msg.sender] = Contract(
             offer.newClubAddress,
             offer.playerAddress,
