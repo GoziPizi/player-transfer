@@ -1,3 +1,6 @@
+// TODO 
+// WITHDRAW VERIFIER BALANCE OF CONTRACT
+
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
@@ -20,14 +23,10 @@ contract PlayerTransferContract {
 
     mapping(address => uint256) public balanceOf;
     mapping(address => uint256) public seasonBudgetOfClub;
-
     mapping(address => Contract) public playerContract;
+    mapping(address => mapping(address => OfferForFreeAgent)) public clubOfferForFreePlayer;
+    mapping(address => mapping(address => OfferForPlayer)) public clubOfferForTakenPlayer;
 
-    //ClubOfferForFreePlayer[clubAddress][playerAddress]
-    mapping(address => mapping(address => ClubOfferForFreePlayer))
-        public clubOfferForFreePlayer;
-    mapping(address => mapping(address => ClubOfferForTakenPlayer))
-        public clubOfferForTakenPlayer;
     function withdraw() public {
         /**
             * Withdraw the balance of the contract
@@ -51,7 +50,7 @@ contract PlayerTransferContract {
         uint256 contractEndDate;
     }
 
-    struct ClubOfferForFreePlayer {
+    struct OfferForFreeAgent {
         address clubAddress;
         address playerAddress;
         uint256 salary;
@@ -59,7 +58,7 @@ contract PlayerTransferContract {
         uint256 contractEndDate;
     }
 
-    struct ClubOfferForTakenPlayer {
+    struct OfferForPlayer {
         address oldClubAddress;
         address newClubAddress;
         address playerAddress;
@@ -84,7 +83,7 @@ contract PlayerTransferContract {
             actualContract.playerAdress == address(0) ||
                 actualContract.contractEndDate < block.timestamp
         );
-        ClubOfferForFreePlayer memory offer = clubOfferForFreePlayer[
+        OfferForFreeAgent memory offer = clubOfferForFreePlayer[
             clubAddress
         ][msg.sender];
         require(offer.playerAddress == msg.sender);
@@ -98,7 +97,7 @@ contract PlayerTransferContract {
         );
         clubOfferForFreePlayer[clubAddress][
             msg.sender
-        ] = ClubOfferForFreePlayer(address(0), address(0), 0, 0, 0);
+        ] = OfferForFreeAgent(address(0), address(0), 0, 0, 0);
     }
 
     /**
@@ -108,7 +107,7 @@ contract PlayerTransferContract {
         The oldClub must have signed the contract
     */
     function acceptClubTransfert(address newClubAddress) public {
-        ClubOfferForTakenPlayer memory offer = clubOfferForTakenPlayer[
+        OfferForPlayer memory offer = clubOfferForTakenPlayer[
             msg.sender
         ][newClubAddress];
         require(offer.playerAddress == msg.sender);
@@ -127,7 +126,7 @@ contract PlayerTransferContract {
         );
         clubOfferForTakenPlayer[msg.sender][
             newClubAddress
-        ] = ClubOfferForTakenPlayer(
+        ] = OfferForPlayer(
             address(0),
             address(0),
             address(0),
@@ -145,13 +144,13 @@ contract PlayerTransferContract {
         The player must have a contract offer from this specific club
     */
     function declineOfferFromClub(address clubAddress) public {
-        ClubOfferForFreePlayer memory offer = clubOfferForFreePlayer[
+        OfferForFreeAgent memory offer = clubOfferForFreePlayer[
             clubAddress
         ][msg.sender];
         require(offer.playerAddress == msg.sender);
         clubOfferForFreePlayer[clubAddress][
             msg.sender
-        ] = ClubOfferForFreePlayer(address(0), address(0), 0, 0, 0);
+        ] = OfferForFreeAgent(address(0), address(0), 0, 0, 0);
         balanceOf[msg.sender] += offer.liberationFee;
     }
 
@@ -175,7 +174,7 @@ contract PlayerTransferContract {
         );
         clubOfferForFreePlayer[msg.sender][
             playerAddress
-        ] = ClubOfferForFreePlayer(
+        ] = OfferForFreeAgent(
             msg.sender,
             playerAddress,
             salary,
@@ -190,13 +189,13 @@ contract PlayerTransferContract {
         The offer must exist
      */
     function withdrawOfferToFreePlayer(address playerAddress) public {
-        ClubOfferForFreePlayer memory offer = clubOfferForFreePlayer[
+        OfferForFreeAgent memory offer = clubOfferForFreePlayer[
             msg.sender
         ][playerAddress];
         require(offer.playerAddress == playerAddress);
         clubOfferForFreePlayer[msg.sender][
             playerAddress
-        ] = ClubOfferForFreePlayer(address(0), address(0), 0, 0, 0);
+        ] = OfferForFreeAgent(address(0), address(0), 0, 0, 0);
     }
 
     /**
@@ -220,7 +219,7 @@ contract PlayerTransferContract {
         require(msg.value >= actualContract.liberationFee);
         clubOfferForTakenPlayer[playerAddress][
             msg.sender
-        ] = ClubOfferForTakenPlayer(
+        ] = OfferForPlayer(
             actualContract.clubAdress,
             msg.sender,
             playerAddress,
@@ -238,13 +237,13 @@ contract PlayerTransferContract {
         The offer must exist
      */
     function withdrawTransferOffer(address playerAddress) public {
-        ClubOfferForTakenPlayer memory offer = clubOfferForTakenPlayer[
+        OfferForPlayer memory offer = clubOfferForTakenPlayer[
             playerAddress
         ][msg.sender];
         require(offer.playerAddress == playerAddress);
         clubOfferForTakenPlayer[playerAddress][
             msg.sender
-        ] = ClubOfferForTakenPlayer(
+        ] = OfferForPlayer(
             address(0),
             address(0),
             address(0),
@@ -266,7 +265,7 @@ contract PlayerTransferContract {
         address playerAddress,
         address newClubAddress
     ) public {
-        ClubOfferForTakenPlayer memory offer = clubOfferForTakenPlayer[
+        OfferForPlayer memory offer = clubOfferForTakenPlayer[
             playerAddress
         ][newClubAddress];
         require(msg.sender == offer.oldClubAddress);
