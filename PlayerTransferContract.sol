@@ -277,7 +277,6 @@ contract PlayerTransferContract {
         address player = msg.sender;
         OfferForFreeAgent memory offer = offersForFreeAgents[player][_newClub];
 
-        // player must be free agent
         require(offer.playerAddress == player, "Offer invalid.");
 
         clearOffer(player, _newClub);
