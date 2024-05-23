@@ -1,354 +1,196 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
+const NOT_OWNER_MSG = "Address not authorized."
 
-describe("Game contract", function () {
-  let Game;
-  let game;
-  let owner;
-  let tokenHolder;
-  let addr2;
-  let secret;
-  let newSecret;
-  let secret32;
-  let newSecret32;
-  let secretHash;
-  let newSecretHash;
-  let lockedFundsAmount;
+describe("Football Transfer Management - smart contract", function () {
+  let FootballTransferManagement;
+  let ftm;
+  let owner, clubA, clubB, clubC, playerA, playerB;
+
 
   beforeEach(async function () {
-    Game = await ethers.getContractFactory("Game");
-    [owner, tokenHolder, addr2] = await ethers.getSigners();
+    FootballTransferManagement = await ethers.getContractFactory("PlayerTransferContract");
+    [owner, clubA, clubB, clubC, playerA, playerB] = await ethers.getSigners();
 
-    game = await Game.deploy();
-    await game.deployed();
-
-    secret = "secret";
-    secret32 = ethers.utils.formatBytes32String(secret);
-    secretHash = ethers.utils.keccak256(secret32);
-    newSecret = "newSecret";
-    newSecret32 = ethers.utils.formatBytes32String(newSecret);
-    newSecretHash = ethers.utils.keccak256(newSecret32);
-
-    lockedFundsAmount = 200000;
+    ftm = await FootballTransferManagement.deploy();
+    await ftm.deployed();
   });
-/*
-  describe("Deployment", function () {
+
+  // TODO : MAKE OFFER CHECK BALANCE OF CLUB AND WALLET
+
+  describe("- Deployment", function () {
     it("Should set the right owner", async function () {
-      expect(await game.getOwner()).to.equal(owner.address);
+      expect(await ftm.getOwner()).to.equal(owner.address);
     });
 
-    it("Should initialize with no locked funds and token not initialized", async function () {
-      expect(await game.getLocked()).to.equal(false);
-      expect(await game.getTokenInitialized()).to.equal(false);
+    it("Should set the right standard", async function () {
+      expect(await ftm.getStandard()).to.equal("Token 0.1");
+    });
+
+    it("Should set the right name", async function () {
+      expect(await ftm.getName()).to.equal("Player Transfer Token");
+    });
+
+    it("Should set the right symbol", async function () {
+      expect(await ftm.getSymbol()).to.equal("PTT");
     });
   });
 
-  describe("Fail tests: pre lockFunds", function() {
-    it("Should revert if initToken() called before funds locked", async function () {
-      await expect(
-        game.connect(owner).initToken()
-      ).to.be.revertedWith("Funds are not locked.");
-    })
+  describe("- Owner methods", function () {
+    describe("  - setClubAuthorizedBudget", function() {
+      it("Should fail if sender not owner", async function () {
+        await expect(ftm.connect(clubA).setClubAuthorizedBudget(clubA.address, 100)).to.be.revertedWith(NOT_OWNER_MSG);
+      });
 
-    it("Should revert if giveToken() called before funds locked", async function () {
-      await expect(
-        game.connect(owner).giveToken(tokenHolder.address)
-      ).to.be.revertedWith("Token is not initialized.");
-    })
-
-    it("Should revert if guess() called before funds locked", async function () {
-      await expect(
-        game.connect(tokenHolder).guess(secret32, lockedFundsAmount, newSecretHash)
-      ).to.be.revertedWith("Token is not held.");
-    })
+      it("Should update club budget after execution", async function () {
+        let budget = 100;
+        await ftm.connect(owner).setClubAuthorizedBudget(clubA.address, budget);
+        expect(await ftm.getClubAuthorizedBudget(clubA.address)).to.equal(budget)
+      });
+    });
   });
 
-  describe("Fail tests: lockFunds", function() {
-    it("Should revert if lockFunds() called by not owner", async function () {
-      await expect(
-        game.connect(tokenHolder).lockFunds(secretHash, { value: lockedFundsAmount })
-      ).to.be.revertedWith("Caller is not owner.");
-    })
+  describe("- Club methods", function () {
+    describe("  - makeOffer", function() {
+      let authorizedBudget = 100
+      beforeEach(async function() {
+        await ftm.connect(owner).setClubAuthorizedBudget(clubA.address, authorizedBudget);
+      })
 
-    it("Should revert if lockFunds() funds to lock not greater than 0", async function () {
-      await expect(
-        game.connect(owner).lockFunds(secretHash, { value: 0 })
-      ).to.be.revertedWith("Funds amount to lock is not greater than 0.");
-    })
-  })
+      it("Should fail if player address invalid", async function () {
+        await expect(ftm.connect(clubA).makeOffer(ethers.constants.AddressZero, 100, 100, Date.now())
+          ).to.be.revertedWith("Player address invalid.");
+      });
 
-  describe("lockFunds", function() {
-    it("Should activate locked state after funds locked", async function () {
-      await game.connect(owner).lockFunds(secretHash, { value: lockedFundsAmount });
-      expect(await game.getLocked()).to.equal(true);
-    })
+      it("Should fail if player is free agent", async function () {
+        await expect(ftm.connect(clubA).makeOffer(playerA.address, 100, 100, Date.now())
+          ).to.be.revertedWith("Player has no active contract.");
+      });
 
-    it("Should set secret hash after funds locked", async function () {
-      await game.connect(owner).lockFunds(secretHash, { value: lockedFundsAmount });
-      expect(await game.getSecretHash()).to.equal(secretHash);
-    })
+      it("Should fail if exceeded authorized budget", async function () {
+        await ftm.connect(clubB).makeOfferForFreeAgent(playerA.address, 100, 100, Date.now());
+        await ftm.connect(playerA).playerValidateOfferForFreeAgent(clubB.address);
 
-    it("Should add locked funds to the wallet's balance after funds locked", async function () {
-      let initBalance = await ethers.provider.getBalance(game.address);
-      await game.connect(owner).lockFunds(secretHash, { value: lockedFundsAmount });
-      let currentBalance = await ethers.provider.getBalance(game.address);
-      expect(currentBalance.sub(initBalance)).to.equal(lockedFundsAmount);
-    })
-  })
+        await expect(ftm.connect(clubA).makeOffer(playerA.address, 100, 100, Date.now(), { value: authorizedBudget + 1 })
+          ).to.be.revertedWith("Authorized budget limit exceeded.");
+      });
 
-  describe("Fail tests: post lockFunds", function() {
-    it("Should revert if lockFunds called after funds locked", async function () {
-      await game.connect(owner).lockFunds(secretHash, { value: lockedFundsAmount });
-      await expect(
-        game.connect(owner).lockFunds(secretHash, { value: lockedFundsAmount })
-      ).to.be.revertedWith("Funds are already locked.")
-    })
-  })
+      it("Should fail if transfer fee below minimum", async function () {
+        let minimumTransferFee = 50;
+        await ftm.connect(clubB).makeOfferForFreeAgent(playerA.address, minimumTransferFee, 100, Date.now());
+        await ftm.connect(playerA).playerValidateOfferForFreeAgent(clubB.address);
 
-  describe("Fail tests: pre initToken", function() {
-    it("Should revert if giveToken() called before token initialized", async function () {
-      await game.connect(owner).lockFunds(secretHash, { value: lockedFundsAmount });
-      await expect(
-        game.connect(owner).giveToken(tokenHolder.address)
-      ).to.be.revertedWith("Token is not initialized.")
-    })
+        await expect(ftm.connect(clubA).makeOffer(playerA.address, 100, 100, Date.now(), { value: minimumTransferFee - 1 })
+          ).to.be.revertedWith("Offered transfer fee is below minimum transfer fee.");
+      });
 
-    it("Should revert if guess() called before token initialized", async function () {
-      await game.connect(owner).lockFunds(secretHash, { value: lockedFundsAmount });
-      await expect(
-        game.connect(tokenHolder).guess(secret32, lockedFundsAmount, newSecretHash)
-      ).to.be.revertedWith("Token is not held.")
-    })
-  })
+      it("Should create offer with correct properties after execution", async function () {
+        let minimumTransferFee = 50;
+        let newMinimumTransferFee = 75;
+        let newSalary = 100;
+        let date = Date.now();
+        await ftm.connect(clubB).makeOfferForFreeAgent(playerA.address, 100, minimumTransferFee, Date.now());
+        await ftm.connect(playerA).playerValidateOfferForFreeAgent(clubB.address);
+        await ftm.connect(clubA).makeOffer(playerA.address, newMinimumTransferFee, newSalary, date, { value: minimumTransferFee });
+        let offer = await ftm.getOffer(playerA.address, clubA.address);
 
-  describe("Fail tests: initToken", function() {
-    it("Should revert if initToken() called by not owner", async function () {
-      await game.connect(owner).lockFunds(secretHash, { value: lockedFundsAmount });
-      await expect(
-        game.connect(tokenHolder).initToken()
-      ).to.be.revertedWith("Caller is not owner.")
-    })
-  })
-
-  describe("initToken", function() {
-    beforeEach(async function () {
-      await game.connect(owner).lockFunds(secretHash, { value: lockedFundsAmount });
-      await game.initToken();
+        await expect(offer.oldClubAddress).to.equal(clubB.address);
+        await expect(offer.newClubAddress).to.equal(clubA.address);
+        await expect(offer.playerAddress).to.equal(playerA.address);
+        await expect(offer.transferFee).to.equal(minimumTransferFee);
+        await expect(offer.contractMinTransferFee).to.equal(newMinimumTransferFee);
+        await expect(offer.contractSalary).to.equal(newSalary);
+        await expect(offer.contractEndDate).to.equal(date);
+        await expect(offer.oldClubSigned).to.equal(false);
+      });
     });
 
-    it("Should be at locked state after token initialized", async function () {
-      expect(await game.getLocked()).to.equal(true);
-    })
+    describe("  - makeOfferForFreeAgent", function() {
+      it("Should fail if player address invalid", async function () {
+        await expect(ftm.connect(clubA).makeOfferForFreeAgent(ethers.constants.AddressZero, 100, 100, Date.now())
+          ).to.be.revertedWith("Player address invalid.");
+      });
 
-    it("Should be at token initialized state after token initialized", async function () {
-      expect(await game.getTokenInitialized()).to.equal(true);
-    })
+      it("Should fail if player is not free agent", async function () {
+        await ftm.connect(clubB).makeOfferForFreeAgent(playerA.address, 100, 100, Date.now());
+        await ftm.connect(playerA).playerValidateOfferForFreeAgent(clubB.address);
+        await expect(ftm.connect(clubA).makeOfferForFreeAgent(playerA.address, 100, 100, Date.now())
+          ).to.be.revertedWith("Player is not free agent.");
+      });
 
-    it("Should set token to owner after token initialized", async function () {
-      expect(await game.getTokenHolderAddress()).to.equal(owner.address)
-    })
-  })
+      it("Should create offer with correct properties after execution", async function () {
+        let  = 50;
+        let newMinimumTransferFee = 75;
+        let newSalary = 100;
+        let date = Date.now();
 
-  describe("Fail tests: post initToken", function() {
-    beforeEach(async function () {
-      await game.connect(owner).lockFunds(secretHash, { value: lockedFundsAmount });
-      await game.connect(owner).initToken();
+        await ftm.connect(clubA).makeOfferForFreeAgent(playerA.address, newSalary, newMinimumTransferFee, date);
+        let offer = await ftm.getOfferForFreeAgent(playerA.address, clubA.address);
+
+        await expect(offer.clubAddress).to.equal(clubA.address);
+        await expect(offer.playerAddress).to.equal(playerA.address);
+        await expect(offer.contractMinTransferFee).to.equal(newMinimumTransferFee);
+        await expect(offer.contractSalary).to.equal(newSalary);
+        await expect(offer.contractEndDate).to.equal(date);
+      });
     });
 
-    it("Should revert if lockFunds() called after token initialized", async function () {
-      await expect(
-        game.connect(owner).lockFunds(secretHash, { value: lockedFundsAmount })
-      ).to.be.revertedWith("Funds are already locked.")
-    })
+    describe("  - withdrawOffer", function() {
+      it("Should fail if offer does not exist", async function () {
+        await expect(ftm.connect(clubA).withdrawOffer(playerA.address)
+          ).to.be.revertedWith("Offer does not exist.");
+      });
 
-    it("Should revert if initToken() called after token initialized", async function () {
-      await expect(
-        game.connect(owner).initToken()
-      ).to.be.revertedWith("Token is already initialized.")
-    })
-  })
+      it("Should clear offer after execution", async function() {
+        let minimumTransferFee = 50;
+        await ftm.connect(owner).setClubAuthorizedBudget(clubA.address, 100);
+        await ftm.connect(clubB).makeOfferForFreeAgent(playerA.address, minimumTransferFee, minimumTransferFee, Date.now());
+        await ftm.connect(playerA).playerValidateOfferForFreeAgent(clubB.address);
+        await ftm.connect(clubA).makeOffer(playerA.address, 100, 100, Date.now(), { value: minimumTransferFee });
+        await ftm.connect(clubA).withdrawOffer(playerA.address);
+        let offer = await ftm.getOffer(playerA.address, clubA.address)
 
-  describe("Fail tests: pre giveToken", function() {
-    it("Should revert if guess() called before token given", async function () {
-      await expect(
-        game.connect(tokenHolder).guess(secret32, lockedFundsAmount, newSecretHash)
-      ).to.be.revertedWith("Token is not held.")
-    })
-  })
+        await expect(offer.oldClubAddress).to.equal(ethers.constants.AddressZero);
+        await expect(offer.newClubAddress).to.equal(ethers.constants.AddressZero);
+        await expect(offer.playerAddress).to.equal(ethers.constants.AddressZero);
+        await expect(offer.transferFee).to.equal(0);
+        await expect(offer.contractMinTransferFee).to.equal(0);
+        await expect(offer.contractSalary).to.equal(0);
+        await expect(offer.contractEndDate).to.equal(0);
+        await expect(offer.oldClubSigned).to.equal(false);
+      })
 
-  describe("Fail tests: giveToken", function() {
-    beforeEach(async function () {
-      await game.connect(owner).lockFunds(secretHash, { value: lockedFundsAmount });
-      await game.connect(owner).initToken();
+      it("Should update club balance after execution", async function() {
+        let minimumTransferFee = 50;
+        await ftm.connect(owner).setClubAuthorizedBudget(clubA.address, 100);
+        await ftm.connect(clubB).makeOfferForFreeAgent(playerA.address, minimumTransferFee, minimumTransferFee, Date.now());
+        await ftm.connect(playerA).playerValidateOfferForFreeAgent(clubB.address);
+        await ftm.connect(clubA).makeOffer(playerA.address, 100, 100, Date.now(), { value: minimumTransferFee });
+        await ftm.connect(clubA).withdrawOffer(playerA.address);
+
+        expect(await ftm.getBalanceOf(clubA.address)).to.equal(minimumTransferFee);
+      })
     });
 
-    it("Should revert if giveToken() called by not owner", async function () {
-      await expect(
-        game.connect(tokenHolder).giveToken(tokenHolder.address)
-      ).to.be.revertedWith("Caller is not owner.")
-    })
+    describe("  - withdrawOfferForFreeAgent", function() {
+      it("Should fail if offer does not exist", async function () {
+        await expect(ftm.connect(clubA).withdrawOfferForFreeAgent(playerA.address)
+          ).to.be.revertedWith("Offer for free agent does not exist.");
+      });
 
-    it("Should revert if giveToken() sets token to address 0", async function() {
-      await expect(
-        game.connect(owner).giveToken(ethers.constants.AddressZero)
-      ).to.be.revertedWith("Token can not be given to address 0.")
-    })
-  })
+      it("Should clear offer after execution", async function() {
+        await ftm.connect(clubA).makeOfferForFreeAgent(playerA.address, 100, 100, Date.now());
+        await ftm.connect(clubA).withdrawOfferForFreeAgent(playerA.address); 
+        let offer = await ftm.getOfferForFreeAgent(playerA.address, clubA.address);
 
-  describe("giveToken", function() {
-    beforeEach(async function () {
-      await game.connect(owner).lockFunds(secretHash, { value: lockedFundsAmount });
-      await game.connect(owner).initToken();
-      await game.connect(owner).giveToken(tokenHolder.address);
+        // await expect(offer.clubAdress).to.equal(ethers.constants.AddressZero);
+        // await expect(offer.playerAddress).to.equal(ethers.constants.AddressZero);
+        await expect(offer.contractMinTransferFee).to.equal(0);
+        await expect(offer.contractSalary).to.equal(0);
+        await expect(offer.contractEndDate).to.equal(0);
+      })
     });
-
-    it("Should be at locked state after token given", async function () {
-      expect(await game.getLocked()).to.equal(true);
-    })
-
-    it("Should activate token initialized state after token given", async function () {
-      expect(await game.getTokenInitialized()).to.equal(true);
-    })
-
-    it("Should set token to holder after token given", async function () {
-      expect(await game.getTokenHolderAddress()).to.equal(tokenHolder.address)
-    })
-  })
-
-  describe("Fail tests: post giveToken", function() {
-    it("Should revert if giveToken() gives token to same holder", async function () {
-      await game.connect(owner).lockFunds(secretHash, { value: lockedFundsAmount });
-      await game.connect(owner).initToken();
-      await game.connect(owner).giveToken(tokenHolder.address);
-      await expect(
-        game.connect(owner).giveToken(tokenHolder.address)
-      ).to.be.revertedWith("Token can not be given to same holder.")
-    })
-  })
-  
-  describe("Fail tests: guess", function() {
-    beforeEach(async function () {
-      await game.connect(owner).lockFunds(secretHash, { value: lockedFundsAmount });
-      await game.connect(owner).initToken();
-    });
-
-    it("Should revert if guess() called by owner", async function () {
-      await expect(
-        game.connect(owner).guess(secret32, lockedFundsAmount, newSecretHash)
-      ).to.be.revertedWith("Token is not held.")
-    })
-
-    it("Should revert if guess() called by non holder", async function () {
-      await game.connect(owner).giveToken(tokenHolder.address);
-      await expect(
-        game.connect(addr2).guess(secret32, lockedFundsAmount, newSecretHash)
-      ).to.be.revertedWith("User doesn't have token.")
-    })
-
-    it("Should revert if guess() called with wrong secret", async function () {
-      await game.connect(owner).giveToken(tokenHolder.address);
-      await expect(
-        game.connect(tokenHolder).guess(ethers.utils.formatBytes32String("wrongSecret"), lockedFundsAmount, newSecretHash)
-      ).to.be.revertedWith("Incorrect secret.")
-    })
-
-    // !!!
-    it("Should revert if guess() fund request too high", async function () {
-      await game.connect(owner).giveToken(tokenHolder.address);
-      await expect(
-        game.connect(tokenHolder).guess(
-          secret32, 
-          lockedFundsAmount * 2, 
-          newSecretHash)
-      ).to.be.reverted
-    })
-  })
-
-  describe("guess", function() {
-    let initContractBalance, initGuesserBalance, gasCost;
-    beforeEach(async function () {
-      await game.connect(owner).lockFunds(secretHash, { value: lockedFundsAmount });
-      initContractBalance = await ethers.provider.getBalance(game.address);
-      initGuesserBalance = await ethers.provider.getBalance(tokenHolder.address);
-      await game.connect(owner).initToken();
-      await game.connect(owner).giveToken(tokenHolder.address);
-      const tx = await game.connect(tokenHolder).guess(secret32, lockedFundsAmount, newSecretHash);
-      const receipt = await tx.wait();
-      const gasUsed = receipt.gasUsed;
-      const gasPrice = tx.gasPrice;
-      gasCost = gasUsed.mul(gasPrice);
-    });
-
-    it("Should update contract's wallet's balance", async function() {
-      let contractBalance = await ethers.provider.getBalance(game.address);
-      expect(
-        contractBalance
-      ).to.equal(
-        initContractBalance.sub(lockedFundsAmount)
-      );
-    })
-
-    // WARNING ==> THE TRANSACTION AMOUNT MUST BE HIGH ENOUGH FOR IT NOT TO BE CANCELLED BY THE GAS COST
-    it("Should update guesser's wallet's balance", async function() {
-      let guesserBalance = await ethers.provider.getBalance(tokenHolder.address);
-      // expect(
-      //   guesserBalance
-      // ).to.equal(
-      //   initGuesserBalance.add(lockedFundsAmount).sub(gasCost)
-      // );
-      expect(guesserBalance).to.be.above(initGuesserBalance);
-    })
-
-    it("Should update secret", async function() {
-      expect(await game.getSecretHash()).to.equal(newSecretHash);
-    })
   });
-
-  describe("Fail tests: post guess", function() {
-    beforeEach(async function () {
-      await game.connect(owner).lockFunds(secretHash, { value: lockedFundsAmount });
-      await game.connect(owner).initToken();
-      await game.connect(owner).giveToken(tokenHolder.address);
-      await game.connect(tokenHolder).guess(secret32, lockedFundsAmount, newSecretHash);
-    });
-
-    it("Should revert if lockFunds() called after guess", async function() {
-      expect(game.connect(owner).lockFunds(newSecretHash, { value: lockedFundsAmount })
-      ).to.be.revertedWith("Funds are already locked.");
-    })
-
-    it("Should revert if initToken() called after guess", async function() {
-      expect(game.connect(owner).initToken()
-      ).to.be.revertedWith("Token is already initialized.");
-    })
-  });
-  */
-
-  describe("New guess", function() {
-    let initSecondGuesserBalance;
-    beforeEach(async function() {
-      initSecondGuesserBalance = await ethers.provider.getBalance(addr2.address);
-      await game.connect(owner).lockFunds(secretHash, { value: lockedFundsAmount });
-      await game.connect(owner).initToken();
-      await game.connect(owner).giveToken(tokenHolder.address);
-      await game.connect(tokenHolder).guess(secret32, lockedFundsAmount / 2, newSecretHash);
-      await game.connect(owner).giveToken(addr2.address);
-      await game.connect(addr2).guess(newSecret32, lockedFundsAmount / 2, secretHash);
-    })
-
-    it("Should update guesser's wallet's balance", async function() {
-      let secondGuesserBalance = await ethers.provider.getBalance(addr2.address);
-      // expect(
-      //   guesserBalance
-      // ).to.equal(
-      //   initGuesserBalance.add(lockedFundsAmount).sub(gasCost)
-      // );
-      expect(secondGuesserBalance).to.be.above(initSecondGuesserBalance);
-    })
-
-    it("Should secret after second guess", async function() {
-      expect(await game.getSecretHash()).to.equal(secretHash)
-    })
-
-  })
 });
+
+
