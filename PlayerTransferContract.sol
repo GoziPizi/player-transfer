@@ -364,4 +364,40 @@ contract PlayerTransferContract {
             0
         );
     }
+
+    /*********************
+     * METHODS FOR TESTING
+     *********************/
+
+    function getOwner() public view returns(address) {
+        return owner;
+    }
+
+    function getStandard() public view returns(string memory) {
+        return standard;
+    }
+
+    function getName() public view returns(string memory) {
+        return name;
+    }
+
+    function getSymbol() public view returns(string memory) {
+        return symbol;
+    }
+
+    function getClubAuthorizedBudget(address _club) public view returns(uint256) {
+        return clubAuthorizedBudget[_club];
+    }
+
+    function getOffer(address _player, address _newClub) public view returns(Offer memory) {
+        return offers[_player][_newClub];
+    }
+
+    function getOfferForFreeAgent(address _player, address _newClub) public view returns(OfferForFreeAgent memory) {
+        return offersForFreeAgents[_player][_newClub];
+    }
+
+    function getBalanceOf(address _club) public view returns(uint256) {
+        return balanceOf[_club];
+    }
 }
