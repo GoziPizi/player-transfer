@@ -351,7 +351,7 @@ contract PlayerTransferContract {
     function clearOfferForFreeAgent(
         address _player,
         address _newClub
-    ) private isFreeAgent(_player) offerForFreeAgentExists(_player, _newClub) {
+    ) private offerForFreeAgentExists(_player, _newClub) {
         offersForFreeAgents[_player][_newClub] = OfferForFreeAgent(
             address(0),
             address(0),
