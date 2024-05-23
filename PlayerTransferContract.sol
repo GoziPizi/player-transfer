@@ -260,6 +260,10 @@ contract PlayerTransferContract {
 
         require(offer.playerAddress == player, "Offer invalid.");
         require(offer.oldClubSigned, "Current club signature missing.");
+        require(
+            playerContract[msg.sender].clubAddress == offer.oldClubAddress,
+            "Current club address mismatch."
+        );
 
         clubAuthorizedBudget[_newClub] -= offer.transferFee;
         clubAuthorizedBudget[offer.oldClubAddress] += offer.transferFee;
