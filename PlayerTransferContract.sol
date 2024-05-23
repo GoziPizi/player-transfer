@@ -294,7 +294,7 @@ contract PlayerTransferContract {
 
         require(offer.playerAddress == player, "Offer invalid.");
 
-        clearOffer(player, _newClub);
+        clearOfferForFreeAgent(player, _newClub);
     }
 
     /*********************
