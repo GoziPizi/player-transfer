@@ -16,8 +16,6 @@ describe("Football Transfer Management - smart contract", function () {
     await ftm.deployed();
   });
 
-  // TODO : MAKE OFFER CHECK BALANCE OF CLUB AND WALLET
-
   describe("- Deployment", function () {
     it("Should set the right owner", async function () {
       expect(await ftm.getOwner()).to.equal(owner.address);
@@ -52,7 +50,7 @@ describe("Football Transfer Management - smart contract", function () {
 
   describe("- Club methods", function () {
     describe("  - makeOffer", function() {
-      let authorizedBudget = 100
+      let authorizedBudget = 500000
       beforeEach(async function() {
         await ftm.connect(owner).setClubAuthorizedBudget(clubA.address, authorizedBudget);
       })
@@ -103,6 +101,32 @@ describe("Football Transfer Management - smart contract", function () {
         await expect(offer.contractEndDate).to.equal(date);
         await expect(offer.oldClubSigned).to.equal(false);
       });
+
+      it("Should send funds from club", async function() {
+        let initClubBalance = await ethers.provider.getBalance(clubA.address);
+
+        let transferFee = 500000;
+        await ftm.connect(clubB).makeOfferForFreeAgent(playerA.address, 100, transferFee, Date.now());
+        await ftm.connect(playerA).playerValidateOfferForFreeAgent(clubB.address);
+        await ftm.connect(clubA).makeOffer(playerA.address, 100, 100, Date.now(), { value: transferFee });
+
+        let finalClubBalance = await ethers.provider.getBalance(clubA.address);
+
+        expect(initClubBalance.sub(finalClubBalance)).to.be.above(transferFee)
+      })
+
+      it("Should receive funds (contract)", async function() {
+        const initContractBalance = await ethers.provider.getBalance(ftm.address);
+
+        let transferFee = 500000;
+        await ftm.connect(clubB).makeOfferForFreeAgent(playerA.address, 100, transferFee, Date.now());
+        await ftm.connect(playerA).playerValidateOfferForFreeAgent(clubB.address);
+        await ftm.connect(clubA).makeOffer(playerA.address, 100, 100, Date.now(), { value: transferFee });
+
+        const finalContractBalance = await ethers.provider.getBalance(ftm.address);
+
+        expect(finalContractBalance.sub(initContractBalance)).to.equal(transferFee)
+      })
     });
 
     describe("  - makeOfferForFreeAgent", function() {
@@ -184,11 +208,101 @@ describe("Football Transfer Management - smart contract", function () {
         let offer = await ftm.getOfferForFreeAgent(playerA.address, clubA.address);
 
         // await expect(offer.clubAdress).to.equal(ethers.constants.AddressZero);
-        // await expect(offer.playerAddress).to.equal(ethers.constants.AddressZero);
+        await expect(offer.playerAddress).to.equal(ethers.constants.AddressZero);
         await expect(offer.contractMinTransferFee).to.equal(0);
         await expect(offer.contractSalary).to.equal(0);
         await expect(offer.contractEndDate).to.equal(0);
       })
+    });
+
+    describe("  - clubValidateOffer", function() {
+      it("Should fail if offer does not exist", async function () {
+        await expect(ftm.connect(clubA).clubValidateOffer(playerA.address, clubB.address)
+          ).to.be.revertedWith("Offer does not exist.");
+      });
+
+      it("Should fail if another club tries to validate", async function() {
+        let minimumTransferFee = 50;
+        await ftm.connect(owner).setClubAuthorizedBudget(clubA.address, 100);
+
+        await ftm.connect(clubB).makeOfferForFreeAgent(playerA.address, minimumTransferFee, minimumTransferFee, Date.now());
+        await ftm.connect(playerA).playerValidateOfferForFreeAgent(clubB.address);
+
+        await ftm.connect(clubA).makeOffer(playerA.address, 100, 100, Date.now(), { value: minimumTransferFee });
+        
+        await expect(ftm.connect(clubC).clubValidateOffer(playerA.address, clubA.address))
+          .to.be.revertedWith("Club not authorized to validate this offer.")
+      })
+
+      it("Should update offer correctly after execution", async function() {
+        let minimumTransferFee = 50;
+        await ftm.connect(owner).setClubAuthorizedBudget(clubA.address, 100);
+
+        await ftm.connect(clubB).makeOfferForFreeAgent(playerA.address, minimumTransferFee, minimumTransferFee, Date.now());
+        await ftm.connect(playerA).playerValidateOfferForFreeAgent(clubB.address);
+        
+        await ftm.connect(clubA).makeOffer(playerA.address, 100, 100, Date.now(), { value: minimumTransferFee });
+        await ftm.connect(clubB).clubValidateOffer(playerA.address, clubA.address)
+        let offer = await ftm.getOffer(playerA.address, clubA.address);
+
+        expect(offer.oldClubSigned).to.equal(true);
+      })
+    });
+
+    describe("  - clubDeclineOffer", function() {
+      it("Should fail if offer does not exist", async function () {
+        await expect(ftm.connect(clubA).clubDeclineOffer(playerA.address, clubB.address)
+          ).to.be.revertedWith("Offer does not exist.");
+      });
+
+      it("Should fail if another club tries to decline", async function() {
+        let minimumTransferFee = 50;
+        await ftm.connect(owner).setClubAuthorizedBudget(clubA.address, 100);
+
+        await ftm.connect(clubB).makeOfferForFreeAgent(playerA.address, minimumTransferFee, minimumTransferFee, Date.now());
+        await ftm.connect(playerA).playerValidateOfferForFreeAgent(clubB.address);
+
+        await ftm.connect(clubA).makeOffer(playerA.address, 100, 100, Date.now(), { value: minimumTransferFee });
+        
+        await expect(ftm.connect(clubC).clubDeclineOffer(playerA.address, clubA.address))
+          .to.be.revertedWith("Club not authorized to decline this offer.")
+      })
+
+      it("Should clear offer after execution", async function() {
+        let minimumTransferFee = 50;
+        await ftm.connect(owner).setClubAuthorizedBudget(clubA.address, 100);
+
+        await ftm.connect(clubB).makeOfferForFreeAgent(playerA.address, minimumTransferFee, minimumTransferFee, Date.now());
+        await ftm.connect(playerA).playerValidateOfferForFreeAgent(clubB.address);
+        
+        await ftm.connect(clubA).makeOffer(playerA.address, 100, 100, Date.now(), { value: minimumTransferFee });
+        await ftm.connect(clubB).clubDeclineOffer(playerA.address, clubA.address)
+        let offer = await ftm.getOffer(playerA.address, clubA.address);
+
+        await expect(offer.oldClubAddress).to.equal(ethers.constants.AddressZero);
+        await expect(offer.newClubAddress).to.equal(ethers.constants.AddressZero);
+        await expect(offer.playerAddress).to.equal(ethers.constants.AddressZero);
+        await expect(offer.transferFee).to.equal(0);
+        await expect(offer.contractMinTransferFee).to.equal(0);
+        await expect(offer.contractSalary).to.equal(0);
+        await expect(offer.contractEndDate).to.equal(0);
+        await expect(offer.oldClubSigned).to.equal(false);
+      })
+
+    it("Should update buying club balance after execution", async function() {
+        let minimumTransferFee = 50;
+        await ftm.connect(owner).setClubAuthorizedBudget(clubA.address, 100);
+
+        await ftm.connect(clubB).makeOfferForFreeAgent(playerA.address, minimumTransferFee, minimumTransferFee, Date.now());
+        await ftm.connect(playerA).playerValidateOfferForFreeAgent(clubB.address);
+        
+        await ftm.connect(clubA).makeOffer(playerA.address, 100, 100, Date.now(), { value: minimumTransferFee });
+        await ftm.connect(clubB).clubDeclineOffer(playerA.address, clubA.address)
+        let balance = await ftm.getBalanceOf(clubA.address);
+
+        await expect(balance).to.equal(minimumTransferFee)
+      })
+
     });
   });
 });
