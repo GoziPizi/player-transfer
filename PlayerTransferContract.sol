@@ -152,7 +152,6 @@ contract PlayerTransferContract {
         clubOfferForFreePlayer[clubAddress][
             msg.sender
         ] = ClubOfferForFreePlayer(address(0), address(0), 0, 0, 0);
-        balanceOf[msg.sender] += offer.liberationFee;
     }
 
     //club related methods
