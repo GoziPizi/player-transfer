@@ -97,8 +97,8 @@ contract PlayerTransferContract {
     modifier isFreeAgent(address _player) {
         Contract memory currentContract = playerContract[_player];
         require(
-            currentContract.endDate < block.timestamp &&
-                currentContract.playerAddress != address(0),
+            currentContract.endDate < block.timestamp ||
+                currentContract.playerAddress == address(0),
             "Player is not free agent."
         );
         _;
