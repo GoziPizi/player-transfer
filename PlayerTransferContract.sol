@@ -229,7 +229,6 @@ contract PlayerTransferContract {
         address player = msg.sender;
         Offer memory offer = offers[player][_newClub];
 
-        require(offer.playerAddress == player, "Offer invalid.");
         require(offer.oldClubSigned, "Current club signature missing.");
         require(
             playerContract[msg.sender].clubAddress == offer.oldClubAddress,
@@ -261,8 +260,6 @@ contract PlayerTransferContract {
         address player = msg.sender;
         OfferForFreeAgent memory offer = offersForFreeAgents[player][_newClub];
 
-        require(offer.playerAddress == player, "Offer invalid.");
-
         playerContract[player] = Contract(
             offer.clubAddress,
             offer.playerAddress,
@@ -278,9 +275,6 @@ contract PlayerTransferContract {
         address _newClub
     ) public offerExists(msg.sender, _newClub) {
         address player = msg.sender;
-        Offer memory offer = offers[player][_newClub];
-
-        require(offer.playerAddress == player, "Offer invalid.");
 
         uint256 transferFee = offers[player][_newClub].transferFee;
         balanceOf[msg.sender] += transferFee;
