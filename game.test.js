@@ -144,7 +144,6 @@ describe("Football Transfer Management - smart contract", function () {
       });
 
       it("Should create offer with correct properties after execution", async function () {
-        let  = 50;
         let newMinimumTransferFee = 75;
         let newSalary = 100;
         let date = newContractDate;
@@ -304,6 +303,156 @@ describe("Football Transfer Management - smart contract", function () {
         await expect(balance).to.equal(minimumTransferFee)
       })
 
+    });
+  });
+
+  describe("- Player methods", function () {
+    describe("  - playerValidateOffer", function() {
+      let minimumTransferFee = 50;
+      let date = Date.now() + 10000;
+
+      beforeEach(async function() {
+        await ftm.connect(owner).setClubAuthorizedBudget(clubA.address, 100);
+        await ftm.connect(owner).setClubAuthorizedBudget(clubB.address, 100);
+        await ftm.connect(owner).setClubAuthorizedBudget(clubC.address, 100);
+        await ftm.connect(clubB).makeOfferForFreeAgent(playerA.address, minimumTransferFee, minimumTransferFee, date);
+        await ftm.connect(playerA).playerValidateOfferForFreeAgent(clubB.address);
+        await ftm.connect(clubA).makeOffer(playerA.address, 100, 100, date, { value: minimumTransferFee });
+      });
+
+      it("Should fail if current club hasn't signed the offer", async function() {
+        await expect(ftm.connect(playerA).playerValidateOffer(clubA.address)
+          ).to.be.revertedWith("Current club signature missing.");
+      });
+
+      it("Should fail if current club's address is not the one in the offer", async function() {
+        await ftm.connect(clubC).makeOffer(playerA.address, 100, 100, Date.now()+100, { value: minimumTransferFee });
+        await ftm.connect(clubB).clubValidateOffer(playerA.address, clubA.address);
+        await ftm.connect(playerA).playerValidateOffer(clubA.address);
+        await ftm.connect(clubB).clubValidateOffer(playerA.address, clubC.address);
+
+        await expect(ftm.connect(playerA).playerValidateOffer(clubC.address)
+          ).to.be.revertedWith("Current club address mismatch.");
+      });
+
+      it("Should update old club balance after execution", async function() {
+        await ftm.connect(clubB).clubValidateOffer(playerA.address, clubA.address);
+        await ftm.connect(playerA).playerValidateOffer(clubA.address);
+        expect(await ftm.getBalanceOf(clubB.address)).to.equal(minimumTransferFee);
+      });
+
+      it("Should update authorized budgets after execution", async function() {
+        await ftm.connect(clubB).clubValidateOffer(playerA.address, clubA.address);
+        await ftm.connect(playerA).playerValidateOffer(clubA.address);
+        expect(await ftm.getClubAuthorizedBudget(clubA.address)).to.equal(100 - minimumTransferFee);
+        expect(await ftm.getClubAuthorizedBudget(clubB.address)).to.equal(100 + minimumTransferFee);
+
+      });
+
+      it("Should create contract with correct properties after execution", async function() {
+        await ftm.connect(clubB).clubValidateOffer(playerA.address, clubA.address);
+        await ftm.connect(playerA).playerValidateOffer(clubA.address);
+        let contract = await ftm.getPlayerContract(playerA.address);
+
+        await expect(contract.clubAddress).to.equal(clubA.address);
+        await expect(contract.playerAddress).to.equal(playerA.address);
+        await expect(contract.minTransferFee).to.equal(100);
+        await expect(contract.salary).to.equal(100);
+        await expect(contract.endDate).to.equal(date);
+
+      });
+
+      it("Should clear offer after execution", async function() {
+        await ftm.connect(clubB).clubValidateOffer(playerA.address, clubA.address);
+        await ftm.connect(playerA).playerValidateOffer(clubA.address);
+
+        let offer = await ftm.getOffer(playerA.address, clubA.address)
+
+        await expect(offer.oldClubAddress).to.equal(ethers.constants.AddressZero);
+        await expect(offer.newClubAddress).to.equal(ethers.constants.AddressZero);
+        await expect(offer.playerAddress).to.equal(ethers.constants.AddressZero);
+        await expect(offer.transferFee).to.equal(0);
+        await expect(offer.contractMinTransferFee).to.equal(0);
+        await expect(offer.contractSalary).to.equal(0);
+        await expect(offer.contractEndDate).to.equal(0);
+        await expect(offer.oldClubSigned).to.equal(false);
+      });
+
+    });
+
+    describe(" - playerValidateOfferForFreeAgent", function() {
+      it("Should create contract with correct properties after execution", async function() {
+        let date = Date.now() + 10000;
+        await ftm.connect(clubB).makeOfferForFreeAgent(playerA.address, 100, 100, date);          
+        await ftm.connect(playerA).playerValidateOfferForFreeAgent(clubB.address);
+
+        let contract = await ftm.getPlayerContract(playerA.address);
+
+        await expect(contract.clubAddress).to.equal(clubB.address);
+        await expect(contract.playerAddress).to.equal(playerA.address);
+        await expect(contract.minTransferFee).to.equal(100);
+        await expect(contract.salary).to.equal(100);
+        await expect(contract.endDate).to.equal(date);
+      });
+
+      it("Should clear offer after execution", async function() {
+        await ftm.connect(clubB).makeOfferForFreeAgent(playerA.address, 100, 100, Date.now());          
+        await ftm.connect(playerA).playerValidateOfferForFreeAgent(clubB.address);
+
+        let offer = await ftm.getOfferForFreeAgent(playerA.address, clubB.address);
+
+        await expect(offer.clubAddress).to.equal(ethers.constants.AddressZero);
+        await expect(offer.playerAddress).to.equal(ethers.constants.AddressZero);
+        await expect(offer.contractMinTransferFee).to.equal(0);
+        await expect(offer.contractSalary).to.equal(0);
+        await expect(offer.contractEndDate).to.equal(0);
+      });
+    });
+
+    describe(" - playerDeclineOffer", function() {
+      let date = Date.now() + 10000;
+      let minimumTransferFee = 50;
+
+      beforeEach(async function() {
+        await ftm.connect(owner).setClubAuthorizedBudget(clubA.address, 100);
+        await ftm.connect(owner).setClubAuthorizedBudget(clubB.address, 100);
+        await ftm.connect(clubB).makeOfferForFreeAgent(playerA.address, minimumTransferFee, minimumTransferFee, date);
+        await ftm.connect(playerA).playerValidateOfferForFreeAgent(clubB.address);
+        await ftm.connect(clubA).makeOffer(playerA.address, 100, 100, date, { value: minimumTransferFee });
+        await ftm.connect(playerA).playerDeclineOffer(clubA.address);
+      });
+
+      it("Should update new club balance", async function() {
+        expect(await ftm.getClubAuthorizedBudget(clubA.address)).to.equal(100);
+      });
+
+      it("Should clear offer after execution", async function() {
+        let offer = await ftm.getOffer(playerA.address, clubA.address)
+
+        await expect(offer.oldClubAddress).to.equal(ethers.constants.AddressZero);
+        await expect(offer.newClubAddress).to.equal(ethers.constants.AddressZero);
+        await expect(offer.playerAddress).to.equal(ethers.constants.AddressZero);
+        await expect(offer.transferFee).to.equal(0);
+        await expect(offer.contractMinTransferFee).to.equal(0);
+        await expect(offer.contractSalary).to.equal(0);
+        await expect(offer.contractEndDate).to.equal(0);
+        await expect(offer.oldClubSigned).to.equal(false);
+      });
+    });
+
+    describe(" - playerDeclineOfferForFreeAgent", function() {
+      it("Should clear offer after execution", async function() {
+        await ftm.connect(clubB).makeOfferForFreeAgent(playerA.address, 100, 100, Date.now());          
+        await ftm.connect(playerA).playerDeclineOfferForFreeAgent(clubB.address);
+
+        let offer = await ftm.getOfferForFreeAgent(playerA.address, clubB.address);
+
+        await expect(offer.clubAddress).to.equal(ethers.constants.AddressZero);
+        await expect(offer.playerAddress).to.equal(ethers.constants.AddressZero);
+        await expect(offer.contractMinTransferFee).to.equal(0);
+        await expect(offer.contractSalary).to.equal(0);
+        await expect(offer.contractEndDate).to.equal(0);
+      });
     });
   });
 });
