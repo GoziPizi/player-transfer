@@ -371,4 +371,8 @@ contract PlayerTransferContract {
     function getBalanceOf(address _club) public view returns(uint256) {
         return balanceOf[_club];
     }
+
+    function getPlayerContract(address _player) public view returns(Contract memory) {
+        return playerContract[_player];
+    }
 }
