@@ -191,7 +191,7 @@ contract PlayerTransferContract {
 
         require(_player != address(0), "Player address invalid.");
 
-        offersForFreeAgents[newClub][_player] = OfferForFreeAgent(
+        offersForFreeAgents[_player][newClub] = OfferForFreeAgent(
             newClub,
             _player,
             _contractSalary,
