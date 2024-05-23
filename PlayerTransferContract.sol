@@ -1,6 +1,3 @@
-// TODO
-// WITHDRAW VERIFIER BALANCE OF CONTRACT
-
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
@@ -29,12 +26,6 @@ contract PlayerTransferContract {
     mapping(address => mapping(address => Offer)) public offers;
 
     function withdraw() public {
-        /**
-            * Withdraw the balance of the contract
-            * Conditions for a withdrawal:
-            The contract must have a balance
-            The contract must be called by the owner
-        */
         uint256 amount = balanceOf[msg.sender];
         require(
             address(this).balance >= amount,
@@ -84,16 +75,6 @@ contract PlayerTransferContract {
         _;
     }
 
-    // modifier isClub(address _club) {
-    //     require(clubs[_club].addr == msg.sender, "Address not club.");
-    //     _;
-    // }
-
-    // modifier isPlayer(address _player) {
-    //     require(players[_player].addr == msg.sender, "Address not player.");
-    //     _;
-    // }
-
     modifier isFreeAgent(address _player) {
         Contract memory currentContract = playerContract[_player];
         require(
@@ -123,16 +104,6 @@ contract PlayerTransferContract {
     /*********************
      * OWNER METHODS
      *********************/
-
-    // function registerClub(address _clubAddress, string memory _name) public isOwner {
-    //     require(clubs[_clubAddress].addr == address(0), "Club already registered");
-    //     clubs[_clubAddress] = Club(_clubAddress, _name, 0);
-    // }
-
-    // function registerPlayer(address _playerAddress, string memory _name) public isOwner {
-    //     require(players[_playerAddress].addr == address(0), "Player already registered");
-    //     players[_playerAddress] = Player(_playerAddress, _name);
-    // }
 
     function setClubAuthorizedBudget(
         address _club,
