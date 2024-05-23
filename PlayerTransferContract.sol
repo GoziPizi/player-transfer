@@ -219,7 +219,7 @@ contract PlayerTransferContract {
     function clubValidateOffer(
         address _player,
         address _newClub
-    ) public offerExists(_player, msg.sender) {
+    ) public offerExists(_player, _newClub) {
         Offer memory offer = offers[_player][_newClub];
         address oldClub = msg.sender;
 
@@ -234,7 +234,7 @@ contract PlayerTransferContract {
     function clubDeclineOffer(
         address _player,
         address _newClub
-    ) public offerExists(_player, msg.sender) {
+    ) public offerExists(_player, _newClub) {
         Offer memory offer = offers[_player][_newClub];
         uint256 transferFee = offer.transferFee;
         address oldClub = msg.sender;
